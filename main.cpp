@@ -193,7 +193,7 @@ void end_cmd(vector<string>& actions)
 	}
 }
 
-void set_info(field_info& info)
+void set_info(field_info& info, vector<string> actions)
 {
 	info.tiles.clear();
 	info.my_tiles.clear();
@@ -203,6 +203,17 @@ void set_info(field_info& info)
 	info.my_recyclers.clear();
 	info.opp_recyclers.clear();
 	info.my_units.clear();
+	if(info.my_camp.scrap_amount == 1 && info.my_camp.in_range_of_recycler == 1)
+	{
+		info.my_camp.x = -1;
+		info.my_camp.y = -1;
+	}
+	if(info.opp_camp.scrap_amount == 1 && info.opp_camp.in_range_of_recycler == 1)
+	{
+		info.opp_camp.x = -1;
+		info.opp_camp.y = -1;
+	}
+	actions.clear();
 }
 
 int main()
@@ -212,13 +223,13 @@ int main()
     cin >> width >> height; cin.ignore();
 
 	field_info info;
+	vector<string> actions;
 	info.my_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
 	info.opp_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
 
     // game loop
     while (1)
 	{
-		set_info(info);
 		info.tiles.reserve(width * height);
         int my_matter;
         int opp_matter;
@@ -240,10 +251,8 @@ int main()
 				save_field(info, tile, my_unit);
             }
         }
-
-        vector<string> actions;
-
 		ctrl_units(info, actions);
 		end_cmd(actions);
+		set_info(info, actions);
     }
 }

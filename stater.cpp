@@ -15,7 +15,7 @@ struct Tile
 {
     int x, y, scrap_amount, owner, units;
     bool recycler, can_build, can_spawn, in_range_of_recycler;
-        ostream& dump(ostream& ioOut) const
+	ostream& dump(ostream& ioOut) const
 	{
         ioOut << x << " " << y;
         return ioOut;
