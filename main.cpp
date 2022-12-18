@@ -31,20 +31,16 @@ ostream& operator<<(ostream& ioOut, const Tile& obj) { return obj.dump(ioOut); }
 class one_unit
 {
 public:
-	int id;
+	Tile curr;
 	int amount;
+	int id;
 	bool check_live;
 	int mission;
-	Tile curr;
+	Tile dest;
 	Tile prev;
 	Tile next;
-	Tile dest;
+	bool should_move;
 };
-
-void print_info(int width, int height)
-{
-    cout << "MESSAGE " << width << "," << height;
-}
 
 struct field_info
 {
@@ -57,6 +53,11 @@ struct field_info
 	vector<Tile> opp_recyclers;
 	vector<one_unit> my_units;
 	vector<one_unit> snap_shot;
+	Tile my_camp;
+	Tile opp_camp;
+	Tile strategy_cover_first;
+	Tile strategy_cover_second;
+	int turn;
 };
 
 bool is_coor(Tile& lhs, Tile& rhs)
@@ -66,40 +67,48 @@ bool is_coor(Tile& lhs, Tile& rhs)
 	return false;
 }
 
-one_unit save_myUnit(vector<one_unit>& prev_pos, Tile& tile)
+void set_units(field_info& info, one_unit& curr_unit)
 {
 	static int id;
-	for(one_unit unit : prev_pos)
+	int prev_units_size = info.snap_shot.size() - 1;
+	one_unit prev_unit;
+	for (int i = 0; i <= prev_units_size; ++i)
 	{
-		if (unit.id == 0)
+		one_unit prev_unit = info.snap_shot[i];
+		if (is_coor(curr_unit.curr, prev_unit.next))
 		{
-			unit.id = ++id;
-			unit.amount = tile.units;
-			unit.check_live = true;
-			unit.prev = unit.curr;
-			unit.curr = tile;
+			curr_unit.id = prev_unit.id;
+			curr_unit.check_live = prev_unit.check_live;
+			curr_unit.mission = prev_unit.mission;
+			curr_unit.dest = prev_unit.dest;
 			/* wait
-			mission, next, dest
+			next
 			*/
-			prev_pos.emplace_back(unit);
-			break;
+			// info.snap_shot.erase(info.snap_shot.begin() + i);
+			return ;
 		}
-		else if (is_coor(unit.prev, tile))
+		else
 		{
+			curr_unit.id = ++id;
+			curr_unit.check_live = true;
+			curr_unit.dest = info.opp_tiles[info.opp_tiles.size() - 1];
 			/* wait
-			id, check_live, mission, next, dest
+			next, dest, misson
 			*/
-			unit.prev = unit.curr;
-			unit.curr = tile;
-			unit.amount = tile.units;
-			prev_pos.emplace_back(unit);
-			break;
+			return ;
 		}
 	}
-	return one_unit();
 }
 
-void save_field(field_info& info, Tile& tile)
+void check_camp(Tile& camp, Tile& tile)
+{
+	if (camp.x == -1 && tile.can_build)
+	{
+		camp = tile;
+	}
+}
+
+void save_field(field_info& info, Tile& tile, one_unit& my_unit)
 {
 	info.tiles.emplace_back(tile);
 
@@ -108,17 +117,15 @@ void save_field(field_info& info, Tile& tile)
 		info.my_tiles.emplace_back(tile);
 		if (tile.units > 0)
 		{
-			one_unit my_unit;
 			my_unit.curr = tile;
 			my_unit.amount = tile.units;
 			info.my_units.emplace_back(my_unit);
-			// one_unit my_unit = save_myUnit(info.prev_pos, tile);
-			// info.prev_pos.emplace_back(my_unit);
 		}
 		else if (tile.recycler)
 		{
 			info.my_recyclers.emplace_back(tile);
 		}
+		check_camp(info.my_camp, tile);
 	}
 	else if (tile.owner == OPP)
 	{
@@ -131,55 +138,43 @@ void save_field(field_info& info, Tile& tile)
 		{
 			info.opp_recyclers.emplace_back(tile);
 		}
-	} else
+		check_camp(info.opp_camp, tile);
+	}
+	else
 	{
 		info.neutral_tiles.emplace_back(tile);
 	}
 }
 
-void cmd_move(field_info& info, vector<string>& actions)
+void give_mission(field_info& info, one_unit& curr_unit)
 {
-	static int id;
-	for (one_unit curr_unit : info.my_units)
-	{
-		int prev_units_size = info.snap_shot.size() - 1;
-		for (int i = 0; i <= prev_units_size; ++i)
-		{
-			one_unit prev_unit = info.snap_shot[i];
-			if (is_coor(curr_unit.curr, prev_unit.next))
-			{
-				curr_unit.id = prev_unit.id;
-				curr_unit.check_live = prev_unit.check_live;
-				curr_unit.mission = prev_unit.mission;
-				curr_unit.dest = prev_unit.dest;
-				/* wait
-				next
-				*/
-				info.snap_shot.erase(info.snap_shot.begin() + i);
-				break;
-			}
-			else
-			{
-				curr_unit.id = ++id;
-				curr_unit.check_live = true;
-				/* wait
-				next, dest, misson
-				*/
-				break;
-			}
-		}
-		//
-		bool should_move = false; // TODO: pick whether to move units from here
 
-		if (should_move)
+}
+
+void set_strategy(field_info& info)
+{
+	// camp 좌표를 이용하여 strategy_cover 구현
+}
+
+void ctrl_units(field_info& info, vector<string>& actions)
+{
+	set_strategy(info);
+	for (int i = 0 ; i < info.my_units.size(); ++i)
+	{
+		one_unit& curr_unit = info.my_units[i];
+		curr_unit.should_move = false; // TODO: pick whether to move units from here
+		set_units(info, curr_unit);
+		give_mission(info, curr_unit);
+		if (curr_unit.should_move)
 		{
 			int amount = 0; // TODO: pick amount of units to move
 			Tile target; // TODO: pick a destination
 			ostringstream action;
-				action << "MOVE " << amount << " " << curr_unit.curr << " " << target;
+				action << "MOVE " << curr_unit.amount << " " << curr_unit.curr << " " << curr_unit.dest;
 				actions.emplace_back(action.str());
 		}
 	}
+	info.snap_shot.swap(info.my_units);
 }
 
 void end_cmd(vector<string>& actions)
@@ -217,18 +212,20 @@ int main()
     cin >> width >> height; cin.ignore();
 
 	field_info info;
-	print_info(width, height);
+	info.my_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
+	info.opp_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
 
     // game loop
-    while (1) {
+    while (1)
+	{
 		set_info(info);
 		info.tiles.reserve(width * height);
         int my_matter;
         int opp_matter;
         cin >> my_matter >> opp_matter; cin.ignore();
-        for (int x = 0; x < height; x++)
+        for (int y = 0; y < height; y++)
 		{
-            for (int y = 0; y < width; y++)
+            for (int x = 0; x < width; x++)
 			{
                 int scrap_amount;
                 int owner; // 1 = me, 0 = foe, -1 = neutral
@@ -238,15 +235,15 @@ int main()
                 int can_spawn;
                 int in_range_of_recycler;
                 cin >> scrap_amount >> owner >> units >> recycler >> can_build >> can_spawn >> in_range_of_recycler; cin.ignore();
-
 				Tile tile = {x, y, scrap_amount, owner, units, recycler == 1, can_build == 1, can_spawn == 1, in_range_of_recycler == 1};
-				save_field(info, tile);
-
+				one_unit my_unit;
+				save_field(info, tile, my_unit);
             }
         }
 
         vector<string> actions;
-		cmd_move(info, actions);
+
+		ctrl_units(info, actions);
 		end_cmd(actions);
     }
 }
