@@ -6,6 +6,8 @@
 
 using namespace std;
 
+vector<string> g_actions;
+
 static constexpr int ME = 1;
 static constexpr int OPP = 0;
 static constexpr int NONE = -1;
@@ -44,12 +46,14 @@ public:
 
 struct field_info
 {
-	vector<Tile> tiles;
-	vector<Tile> my_tiles;
-	vector<Tile> opp_tiles;
-	vector<Tile> neutral_tiles;
-	vector<Tile> opp_units;
-	vector<Tile> my_recyclers;
+	int width_field;
+	int height_field;
+	vector<vector<Tile>>	tiles;
+	vector<Tile>	my_tiles;
+	vector<Tile>	opp_tiles;
+	vector<Tile>	neutral_tiles;
+	vector<Tile>	opp_units;
+	vector<Tile>	my_recyclers;
 	vector<Tile> opp_recyclers;
 	vector<one_unit> my_units;
 	vector<one_unit> snap_shot;
@@ -110,8 +114,6 @@ void check_camp(Tile& camp, Tile& tile)
 
 void save_field(field_info& info, Tile& tile, one_unit& my_unit)
 {
-	info.tiles.emplace_back(tile);
-
 	if (tile.owner == ME)
 	{
 		info.my_tiles.emplace_back(tile);
@@ -153,8 +155,17 @@ void give_mission(field_info& info, one_unit& curr_unit)
 
 void set_strategy(field_info& info)
 {
-	// camp 좌표를 이용하여 strategy_cover 구현
+
 }
+
+void print_info(int info1, int info2)
+{
+	ostringstream action;
+	action << "MESSAGE "<< info1 << " " << info2;
+	g_actions.emplace_back(action.str());
+}
+
+
 
 void ctrl_units(field_info& info, vector<string>& actions)
 {
@@ -195,7 +206,9 @@ void end_cmd(vector<string>& actions)
 
 void set_info(field_info& info, vector<string> actions)
 {
-	info.tiles.clear();
+	for (int i = 0; i < info.tiles.size(); ++i)
+		info.tiles[i].clear();
+	info.tiles.resize(info.height_field);
 	info.my_tiles.clear();
 	info.opp_tiles.clear();
 	info.neutral_tiles.clear();
@@ -223,20 +236,23 @@ int main()
     cin >> width >> height; cin.ignore();
 
 	field_info info;
-	vector<string> actions;
+	info.width_field = width;
+	info.height_field = height;
+	info.tiles.reserve(height);
 	info.my_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
 	info.opp_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
 
     // game loop
     while (1)
 	{
-		info.tiles.reserve(width * height);
+		print_info(info.width_field, info.height_field);
         int my_matter;
         int opp_matter;
         cin >> my_matter >> opp_matter; cin.ignore();
-        for (int y = 0; y < height; y++)
+		for (int y = 0; y < height; y++)
 		{
-            for (int x = 0; x < width; x++)
+			info.tiles[y].reserve(width);
+			for (int x = 0; x < width; x++)
 			{
                 int scrap_amount;
                 int owner; // 1 = me, 0 = foe, -1 = neutral
@@ -247,10 +263,12 @@ int main()
                 int in_range_of_recycler;
                 cin >> scrap_amount >> owner >> units >> recycler >> can_build >> can_spawn >> in_range_of_recycler; cin.ignore();
 				Tile tile = {x, y, scrap_amount, owner, units, recycler == 1, can_build == 1, can_spawn == 1, in_range_of_recycler == 1};
+				info.tiles[y].emplace_back(tile);
 				one_unit my_unit;
 				save_field(info, tile, my_unit);
             }
         }
+		vector<string>& actions = g_actions;
 		ctrl_units(info, actions);
 		end_cmd(actions);
 		set_info(info, actions);
