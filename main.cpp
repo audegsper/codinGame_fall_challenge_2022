@@ -175,14 +175,22 @@ void give_mission(field_info& f_info, one_unit& curr_unit)
 
 }
 
+#define L_SIDE 1
+#define R_SIDE 2
+#define U_SIDE 3
+#define D_SIDE 4
+
 void set_side(field_info& f_info, strategy_info& s_info)
 {
 	if (f_info.my_camp.x - f_info.opp_camp.x > 0)
 	{
-
+		s_info.my_side = R_SIDE;
+		s_info.opp_side = L_SIDE;
 	}
 	else
 	{
+		s_info.my_side = L_SIDE;
+		s_info.opp_side = R_SIDE;
 	}
 }
 
