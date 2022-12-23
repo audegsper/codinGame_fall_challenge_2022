@@ -8,6 +8,9 @@
 		"sstream": "cpp",
 		"iostream": "cpp",
 		"type_traits": "cpp",
-		"system_error": "cpp"
+		"system_error": "cpp",
+		"algorithm": "cpp",
+		"string": "cpp",
+		"ostream": "cpp"
 	}
 }
