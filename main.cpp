@@ -18,11 +18,23 @@ static constexpr int NONE = -1;
  * the standard input according to the problem statement.
  **/
 
+/* define boder_type*/
+#define MY_AREA 1
+#define OPP_AREA 2
+#define MY_LIMIT_LINE 3
+#define OPP_LIMIT_LINE 4
+#define NEUTRAL_AREA 5
 struct Tile
 {
     int x, y;
-	int scrap_amount, owner, units;
-    bool recycler, can_build, can_spawn, in_range_of_recycler;
+	int scrap_amount;
+	int owner;
+	int units;
+	int border_type;
+    bool recycler;
+	bool can_build;
+	bool can_spawn;
+	bool in_range_of_recycler;
     ostream& dump(ostream& ioOut) const
 	{
         ioOut << x << " " << y;
@@ -48,8 +60,14 @@ public:
 struct strategy_info
 {
 	int my_side;
+	int my_tiles_count;
+	int my_scrap;
+
 	int opp_side;
-	Tile dest;
+	int opp_tiles_count;
+	int opp_scrap;
+
+	int neutral_tiles_count;
 };
 
 struct field_info
@@ -62,13 +80,28 @@ struct field_info
 	vector<Tile>	neutral_tiles;
 	vector<Tile>	opp_units;
 	vector<Tile>	my_recyclers;
-	vector<Tile> opp_recyclers;
+	vector<Tile>	opp_recyclers;
 	vector<one_unit> my_units;
 	vector<one_unit> snap_shot;
 	Tile my_camp;
 	Tile opp_camp;
 	int turn;
 };
+
+void print_info(int num_args, ...)
+{
+	va_list args;
+	va_start(args, num_args);
+	ostringstream action;
+
+	action << "MESSAGE ";
+	for (int i = 0; i < num_args; ++i)
+	{
+		action << va_arg(args, int) << " ";
+	}
+	g_actions.emplace_back(action.str());
+	va_end(args);
+}
 
 void set_info(field_info& f_info, vector<string>& actions)
 {
@@ -111,24 +144,9 @@ void end_cmd(vector<string>& actions)
 	}
 }
 
-void print_info(int num_args, ...)
-{
-	va_list args;
-	va_start(args, num_args);
-	ostringstream action;
-
-	action << "MESSAGE ";
-	for (int i = 0; i < num_args; ++i)
-	{
-		action << va_arg(args, int) << " ";
-	}
-	g_actions.emplace_back(action.str());
-	va_end(args);
-}
-
 void check_camp(Tile& camp, Tile& tile)
 {
-	if (camp.x == -1 && tile.can_build)
+	if (camp.x == -1 && tile.units == 0)
 	{
 		camp = tile;
 	}
@@ -259,27 +277,16 @@ void ctrl_units(field_info& f_info, vector<string>& actions)
 	f_info.snap_shot.swap(f_info.my_units);
 }
 
-int main()
+void game_loop(field_info& f_info, strategy_info& s_info,vector<string>& actions)
 {
-    int width;
-    int height;
-    cin >> width >> height; cin.ignore();
-
-	field_info f_info;
-	strategy_info s_info;
-	f_info.width_field = width;
-	f_info.height_field = height;
-	f_info.tiles.reserve(height);
-	f_info.my_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
-	f_info.opp_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
-
-    // game loop
+	int width = f_info.width_field;
+	int height = f_info.height_field;
     while (1)
 	{
-		print_info(2, f_info.width_field, f_info.height_field);
         int my_matter;
         int opp_matter;
         cin >> my_matter >> opp_matter; cin.ignore();
+		set_info(f_info, g_actions);
 		for (int y = 0; y < height; y++)
 		{
 			f_info.tiles[y].reserve(width);
@@ -299,10 +306,34 @@ int main()
 				save_field(f_info, tile, my_unit);
             }
         }
+		print_info(6, f_info.width_field, f_info.height_field,f_info.my_camp.x , f_info.my_camp.y, f_info.opp_camp.x, f_info.opp_camp.y);
 		vector<string>& actions = g_actions;
 		set_strategy(f_info, s_info);
 		ctrl_units(f_info, actions);
 		end_cmd(actions);
-		set_info(f_info, actions);
     }
+}
+
+// 최단 경로 구한 후 한계선, 중립선 구하기.
+void inspect_field(field_info& f_info, strategy_info& s_info, vector<string>& actions)
+{
+
+}
+
+int main()
+{
+    int width;
+    int height;
+    cin >> width >> height; cin.ignore();
+
+	field_info f_info;
+	strategy_info s_info;
+	f_info.width_field = width;
+	f_info.height_field = height;
+	f_info.tiles.reserve(height);
+	f_info.my_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
+	f_info.opp_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
+
+	inspect_field(f_info, s_info, g_actions);
+	game_loop(f_info, s_info, g_actions);
 }
