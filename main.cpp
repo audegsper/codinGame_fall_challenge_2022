@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <sstream>
 #include <stdarg.h>
+#include <utility>
 
 using namespace std;
 
@@ -18,12 +19,27 @@ static constexpr int NONE = -1;
  * the standard input according to the problem statement.
  **/
 
-/* define boder_type*/
+/* define boder_type */
 #define MY_AREA 1
 #define OPP_AREA 2
-#define MY_LIMIT_LINE 3
-#define OPP_LIMIT_LINE 4
+#define MY_LIMIT_AREA 3
+#define OPP_LIMIT_AREA 4
 #define NEUTRAL_AREA 5
+
+/* define symmetry_type */
+#define VERTICAL 1
+#define MIRROR 2
+
+/* define x_side */
+#define L_SIDE 1
+#define R_SIDE 2
+
+/* define y_side */
+#define SAME 0
+#define U_SIDE 1
+#define D_SIDE 2
+
+struct Tile_around;
 struct Tile
 {
     int x, y;
@@ -35,13 +51,32 @@ struct Tile
 	bool can_build;
 	bool can_spawn;
 	bool in_range_of_recycler;
+	int footprint;
+	Tile_around *around;
     ostream& dump(ostream& ioOut) const
 	{
         ioOut << x << " " << y;
         return ioOut;
     }
+	bool operator== (const Tile& obj) const
+	{
+		return (x == obj.x && y == obj.y);
+	}
 };
 ostream& operator<<(ostream& ioOut, const Tile& obj) { return obj.dump(ioOut); }
+
+struct Tile_around
+{
+	Tile up;
+	Tile down;
+	Tile left;
+	Tile right;
+
+	Tile up_left;
+	Tile up_right;
+	Tile down_left;
+	Tile down_right;
+};
 
 class one_unit
 {
@@ -54,38 +89,47 @@ public:
 	Tile dest;
 	Tile prev;
 	Tile next;
+	pair<Tile, Tile> mark_target;
 	bool should_move;
 };
 
 struct strategy_info
 {
-	int my_side;
+	int turn;
+	bool check_neutral_line;
+
+	int my_side_x;
+	int my_side_y;
 	int my_tiles_count;
 	int my_scrap;
+	vector<Tile>	my_limit_line;
 
-	int opp_side;
+	int opp_side_x;
+	int opp_side_y;
 	int opp_tiles_count;
 	int opp_scrap;
+	vector<Tile>	opp_limit_line;
 
 	int neutral_tiles_count;
+	vector<Tile>	neutral_line;
 };
 
 struct field_info
 {
+	int symmetry_type;
 	int width_field;
 	int height_field;
 	vector<vector<Tile>>	tiles;
 	vector<Tile>	my_tiles;
 	vector<Tile>	opp_tiles;
 	vector<Tile>	neutral_tiles;
-	vector<Tile>	opp_units;
+	vector<one_unit>	opp_units;
 	vector<Tile>	my_recyclers;
 	vector<Tile>	opp_recyclers;
 	vector<one_unit> my_units;
 	vector<one_unit> snap_shot;
 	Tile my_camp;
 	Tile opp_camp;
-	int turn;
 };
 
 void print_info(int num_args, ...)
@@ -107,7 +151,7 @@ void set_info(field_info& f_info, vector<string>& actions)
 {
 	for (int i = 0; i < f_info.tiles.size(); ++i)
 		f_info.tiles[i].clear();
-	f_info.tiles.resize(f_info.height_field);
+	f_info.tiles.resize(f_info.width_field);
 	f_info.my_tiles.clear();
 	f_info.opp_tiles.clear();
 	f_info.neutral_tiles.clear();
@@ -152,7 +196,7 @@ void check_camp(Tile& camp, Tile& tile)
 	}
 }
 
-void save_field(field_info& f_info, Tile& tile, one_unit& my_unit)
+void save_field(field_info& f_info, Tile& tile, one_unit& my_unit, one_unit& opp_unit)
 {
 	if (tile.owner == ME)
 	{
@@ -174,7 +218,9 @@ void save_field(field_info& f_info, Tile& tile, one_unit& my_unit)
 		f_info.opp_tiles.emplace_back(tile);
 		if (tile.units > 0)
 		{
-			f_info.opp_units.emplace_back(tile);
+			opp_unit.curr = tile;
+			opp_unit.amount = tile.units;
+			f_info.opp_units.emplace_back(opp_unit);
 		}
 		else if (tile.recycler)
 		{
@@ -193,28 +239,123 @@ void give_mission(field_info& f_info, one_unit& curr_unit)
 
 }
 
-#define L_SIDE 1
-#define R_SIDE 2
-#define U_SIDE 3
-#define D_SIDE 4
-
-void set_side(field_info& f_info, strategy_info& s_info)
+void find_route(field_info& f_info, strategy_info& s_info,Tile& start, Tile& end)
 {
-	if (f_info.my_camp.x - f_info.opp_camp.x > 0)
+	if (start == end)
+		return;
+	if (s_info.my_side_x == L_SIDE)
 	{
-		s_info.my_side = R_SIDE;
-		s_info.opp_side = L_SIDE;
+		find_route(f_info, s_info, start, end);
+	}
+}
+
+void check_route(field_info& f_info, strategy_info& s_info)
+{
+	for (int i = 0; i < f_info.my_units.size(); ++i)
+	{
+		find_route(f_info, s_info, f_info.my_units[i].mark_target.first, f_info.my_units[i].mark_target.second);
+		find_route(f_info, s_info, f_info.opp_units[i].mark_target.first, f_info.opp_units[i].mark_target.second);
+	}
+}
+
+void set_side_y(field_info& f_info, strategy_info& s_info)
+{
+	s_info.my_side_y = SAME;
+	s_info.opp_side_y = SAME;
+	if (f_info.my_camp.y > f_info.opp_camp.y)
+	{
+		s_info.my_side_y = D_SIDE;
+		s_info.opp_side_y = U_SIDE;
+	}
+	else if (f_info.my_camp.y < f_info.opp_camp.y)
+	{
+		s_info.my_side_y = U_SIDE;
+		s_info.opp_side_y = D_SIDE;
+	}
+}
+
+void set_side_x(field_info& f_info, strategy_info& s_info)
+{
+	if (f_info.my_camp.x > f_info.opp_camp.x)
+	{
+		s_info.my_side_x = R_SIDE;
+		s_info.opp_side_x = L_SIDE;
 	}
 	else
 	{
-		s_info.my_side = L_SIDE;
-		s_info.opp_side = R_SIDE;
+		s_info.my_side_x = L_SIDE;
+		s_info.opp_side_x = R_SIDE;
+	}
+}
+
+void set_mark_target(one_unit& unit, Tile& target)
+{
+	unit.mark_target.first = unit.curr;
+	unit.mark_target.second = target;
+}
+
+void set_mark_target(field_info& f_info, strategy_info& s_info)
+{
+	set_mark_target(f_info.my_units[0], f_info.opp_units[3].curr);
+	set_mark_target(f_info.my_units[3], f_info.opp_units[0].curr);
+	set_mark_target(f_info.opp_units[0], f_info.my_units[3].curr);
+	set_mark_target(f_info.opp_units[3], f_info.my_units[0].curr);
+
+	if (f_info.symmetry_type == VERTICAL)
+	{
+		set_mark_target(f_info.my_units[1], f_info.opp_units[1].curr);
+		set_mark_target(f_info.my_units[2], f_info.opp_units[2].curr);
+		set_mark_target(f_info.opp_units[1], f_info.my_units[1].curr);
+		set_mark_target(f_info.opp_units[2], f_info.my_units[2].curr);
+	}
+	else
+	{
+		set_mark_target(f_info.my_units[1], f_info.opp_units[2].curr);
+		set_mark_target(f_info.my_units[2], f_info.opp_units[1].curr);
+		set_mark_target(f_info.opp_units[1], f_info.my_units[2].curr);
+		set_mark_target(f_info.opp_units[2], f_info.my_units[1].curr);
+	}
+}
+
+void check_symmetry(field_info& f_info, strategy_info& s_info)
+{
+	set_side_x(f_info, s_info);
+	set_side_y(f_info, s_info);
+	if (f_info.my_camp.y == f_info.opp_camp.y)
+		f_info.symmetry_type = VERTICAL;
+	else
+		f_info.symmetry_type = MIRROR;
+}
+
+void save_border(field_info& f_info, strategy_info& s_info)
+{
+	int w = f_info.width_field / 2;
+	if (s_info.check_neutral_line == true)
+	{
+		for (int h = 0; h < f_info.height_field; ++h)
+		{
+			s_info.my_limit_line.emplace_back(f_info.tiles[w - 1][h]);
+			s_info.neutral_line.emplace_back(f_info.tiles[w][h]);
+			s_info.opp_limit_line.emplace_back(f_info.tiles[w + 1][h]);
+		}
+	}
+	else
+	{
+		for (int h = 0; h < f_info.height_field; ++h)
+		{
+			s_info.my_limit_line.emplace_back(f_info.tiles[w - 1][h]);
+ 			s_info.opp_limit_line.emplace_back(f_info.tiles[w][h]);
+		}
 	}
 }
 
 void set_strategy(field_info& f_info, strategy_info& s_info)
 {
-	set_side(f_info, s_info);
+	save_border(f_info, s_info);
+	check_symmetry(f_info, s_info);
+	set_mark_target(f_info, s_info);
+	// check_route(f_info, s_info);
+
 }
 
 bool is_coor(Tile& lhs, Tile& rhs)
@@ -277,47 +418,73 @@ void ctrl_units(field_info& f_info, vector<string>& actions)
 	f_info.snap_shot.swap(f_info.my_units);
 }
 
+void set_around(field_info& f_info, Tile_around* around, Tile& tile, int x, int y)
+{
+	// around->up = f_info.tiles[x][y - 1];
+	// around->down = f_info.tiles[x][y + 1];
+	// around->left = f_info.tiles[x - 1][y];
+	// around->right = f_info.tiles[x + 1][y];
+	// around->up_left = f_info.tiles[x - 1][y - 1];
+	// around->up_right = f_info.tiles[x + 1][y - 1];
+	// around->down_left = f_info.tiles[x - 1][y + 1];
+	// around->down_right = f_info.tiles[x + 1][y + 1];
+}
+
 void game_loop(field_info& f_info, strategy_info& s_info,vector<string>& actions)
 {
+	int my_matter;
+	int opp_matter;
+	cin >> my_matter >> opp_matter; cin.ignore();
+	set_info(f_info, actions);
 	int width = f_info.width_field;
 	int height = f_info.height_field;
-    while (1)
+	for (int x = 0; x < width; x++)
 	{
-        int my_matter;
-        int opp_matter;
-        cin >> my_matter >> opp_matter; cin.ignore();
-		set_info(f_info, g_actions);
+		f_info.tiles[x].reserve(height);
 		for (int y = 0; y < height; y++)
 		{
-			f_info.tiles[y].reserve(width);
-			for (int x = 0; x < width; x++)
-			{
-                int scrap_amount;
-                int owner; // 1 = me, 0 = foe, -1 = neutral
-                int units;
-                int recycler;
-                int can_build;
-                int can_spawn;
-                int in_range_of_recycler;
-                cin >> scrap_amount >> owner >> units >> recycler >> can_build >> can_spawn >> in_range_of_recycler; cin.ignore();
-				Tile tile = {x, y, scrap_amount, owner, units, recycler == 1, can_build == 1, can_spawn == 1, in_range_of_recycler == 1};
-				f_info.tiles[y].emplace_back(tile);
-				one_unit my_unit;
-				save_field(f_info, tile, my_unit);
-            }
-        }
-		print_info(6, f_info.width_field, f_info.height_field,f_info.my_camp.x , f_info.my_camp.y, f_info.opp_camp.x, f_info.opp_camp.y);
-		vector<string>& actions = g_actions;
-		set_strategy(f_info, s_info);
+			int scrap_amount;
+			int owner; // 1 = me, 0 = foe, -1 = neutral
+			int units;
+			int recycler;
+			int can_build;
+			int can_spawn;
+			int in_range_of_recycler;
+			cin >> scrap_amount >> owner >> units >> recycler >> can_build >> can_spawn >> in_range_of_recycler; cin.ignore();
+			Tile tile = {x, y, scrap_amount, owner, units, recycler == 1, can_build == 1, can_spawn == 1, in_range_of_recycler == 1};
+			tile.around = new Tile_around;
+			set_around(f_info, tile.around, tile, x, y);
+			f_info.tiles[x].emplace_back(tile);
+			one_unit my_unit;
+			one_unit opp_unit;
+			my_unit.dest.x = -1;
+			save_field(f_info, tile, my_unit, opp_unit);
+		}
+	}
+}
+
+void middle(field_info& f_info, strategy_info& s_info,vector<string>& actions)
+{
+    while (1)
+	{
+		game_loop(f_info, s_info, actions);
+		// set_strategy(f_info, s_info);
 		ctrl_units(f_info, actions);
 		end_cmd(actions);
     }
 }
 
 // 최단 경로 구한 후 한계선, 중립선 구하기.
-void inspect_field(field_info& f_info, strategy_info& s_info, vector<string>& actions)
+void opening(field_info& f_info, strategy_info& s_info, vector<string>& actions)
 {
+	game_loop(f_info, s_info, actions);
+	set_strategy(f_info, s_info);
+	end_cmd(actions);
+}
 
+void ending(field_info& f_info, strategy_info& s_info, vector<string>& actions)
+{
+	end_cmd(actions);
 }
 
 int main()
@@ -328,12 +495,16 @@ int main()
 
 	field_info f_info;
 	strategy_info s_info;
+	vector<string>& actions = g_actions;
 	f_info.width_field = width;
 	f_info.height_field = height;
 	f_info.tiles.reserve(height);
-	f_info.my_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
-	f_info.opp_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0};
+	f_info.my_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0, 0};
+	f_info.opp_camp = {-1, -1, 0, 0, 0, 0, 0, 0, 0, 0};
+	if (width % 2 == 1)
+		s_info.check_neutral_line = true;
 
-	inspect_field(f_info, s_info, g_actions);
-	game_loop(f_info, s_info, g_actions);
+	opening(f_info, s_info, actions);
+	middle(f_info, s_info, actions);
+	ending(f_info, s_info, actions);
 }
